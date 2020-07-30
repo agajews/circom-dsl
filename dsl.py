@@ -217,12 +217,3 @@ class Input(Op):
     @property
     def fullname(self):
         return self.name
-
-
-if __name__ == "__main__":
-    a = Input("a")
-    b = Input("b", private=True)
-    c = (a.detach() / b).attach()
-    a.check_equals(c * b)
-    circom = c.gen()
-    print(circom)
