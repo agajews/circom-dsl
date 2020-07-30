@@ -5,6 +5,7 @@ _global_names = set()
 
 class Op:
     def __init__(self, children, name, passthrough=False):
+        self.generated = False
         self.children = children
         self.constraints = []
         self.name = name
@@ -67,6 +68,7 @@ class Op:
         return circom
 
     def _gen(self, traversed, my_signals=True):
+        self.generated = True
         if self in traversed:
             return [], []
         traversed.add(self)
@@ -102,6 +104,14 @@ class Op:
         assert all([isinstance(left, Op), isinstance(right, Op)])
         assert not any([isinstance(left, Var), isinstance(right, Var)])
         self.constraints.append((left, right))
+
+    def __del__(self):
+        if not self.generated:
+            raise Exception(
+                "node {} created but not used, you might have added a constraint to an isolated variable".format(
+                    self.fullname
+                )
+            )
 
 
 class Var(Op):

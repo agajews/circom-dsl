@@ -4,3 +4,6 @@
 *.wasm
 *.json
 *.wtns
+__pycache__
+*.pyo
+*.pyc
