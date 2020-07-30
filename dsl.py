@@ -25,6 +25,15 @@ class Op:
         else:
             return Add(self, other)
 
+    def __sub__(self, other):
+        if isinstance(other, int):
+            return Sub(self, Constant(other))
+        assert isinstance(other, Op)
+        if isinstance(other, Var):
+            return VarSub(self, other)
+        else:
+            return Sub(self, other)
+
     def __mul__(self, other):
         if isinstance(other, int):
             return Mul(self, Constant(other))
@@ -37,6 +46,10 @@ class Op:
     def __truediv__(self, other):
         assert isinstance(other, Var)
         return VarDiv(self, other)
+
+    def __mod__(self, other):
+        assert isinstance(other, Var)
+        return VarMod(self, other)
 
     @property
     def fullname(self):
@@ -59,15 +72,16 @@ class Op:
         traversed.add(self)
         signals = []
         statements = []
-        for child in self.children + self.constraints:
+        constraint_children = [child for tup in self.constraints for child in tup]
+        for child in self.children + constraint_children:
             curr_signals, curr_statements = child._gen(traversed)
             signals += curr_signals
             statements += curr_statements
         if my_signals:
             signals += self._gen_signals()
         statements += self._gen_statements()
-        for constraint in self.constraints:
-            statements.append("{} === {};".format(self.fullname, constraint.fullname))
+        for left, right in self.constraints:
+            statements.append("{} === {};".format(left.fullname, right.fullname))
         return signals, statements
 
     def _gen_signals(self):
@@ -80,10 +94,14 @@ class Op:
     def detach(self):
         return Detachment(self)
 
-    def check_equals(self, other):
-        assert isinstance(other, Op)
-        assert not all([isinstance(self, Var), isinstance(other, Var)])
-        self.constraints.append(other)
+    def check_equals(self, left, right):
+        if isinstance(left, int):
+            left = Constant(left)
+        if isinstance(right, int):
+            right = Constant(right)
+        assert all([isinstance(left, Op), isinstance(right, Op)])
+        assert not any([isinstance(left, Var), isinstance(right, Var)])
+        self.constraints.append((left, right))
 
 
 class Var(Op):
@@ -95,6 +113,12 @@ class Var(Op):
             return VarAdd(self, Constant(other))
         assert isinstance(other, Op)
         return VarAdd(self, other)
+
+    def __sub__(self, other):
+        if isinstance(other, int):
+            return VarSub(self, Constant(other))
+        assert isinstance(other, Op)
+        return VarSub(self, other)
 
     def __mul__(self, other):
         if isinstance(other, int):
@@ -108,13 +132,19 @@ class Var(Op):
         assert isinstance(other, Op)
         return VarDiv(self, other)
 
+    def __mod__(self, other):
+        if isinstance(other, int):
+            return VarMod(self, Constant(other))
+        assert isinstance(other, Op)
+        return VarMod(self, other)
+
     def attach(self):
         return Attachment(self)
 
 
-class Constant(Var):
+class Constant(Op):
     def __init__(self, val):
-        super().__init__(children=[], name=str(val), passthrough=True)
+        super().__init__(children=[], name="c{}".format(val), passthrough=True)
         self.val = val
 
     @property
@@ -169,6 +199,20 @@ class VarAdd(Var):
         return [statement]
 
 
+class VarSub(Var):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_minus_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} - {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
 class VarMul(Var):
     def __init__(self, left, right):
         super().__init__(
@@ -197,6 +241,20 @@ class VarDiv(Var):
         return [statement]
 
 
+class VarMod(Var):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_mod_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} % {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
 class Add(Op):
     def __init__(self, left, right):
         super().__init__(
@@ -206,6 +264,20 @@ class Add(Op):
     def _gen_statements(self):
         [left, right] = self.children
         statement = "{} <== {} + {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class Sub(Op):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_minus_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <== {} - {};".format(
             self.fullname, left.fullname, right.fullname
         )
         return [statement]
