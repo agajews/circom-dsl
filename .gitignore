@@ -1,0 +1,6 @@
+*.circom
+*.sym
+*.r1cs
+*.wasm
+*.json
+*.wtns
