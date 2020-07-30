@@ -6,6 +6,7 @@ _global_names = set()
 class Op:
     def __init__(self, children, name):
         self.children = children
+        self.constraints = []
         self.name = name
         if self.fullname in _global_names:
             suffix = 0
@@ -15,10 +16,22 @@ class Op:
         _global_names.add(self.fullname)
 
     def __add__(self, other):
-        return Add(self, other)
+        assert isinstance(other, Op)
+        if isinstance(other, Var):
+            return VarAdd(self, other)
+        else:
+            return Add(self, other)
 
     def __mul__(self, other):
-        return Mul(self, other)
+        assert isinstance(other, Op)
+        if isinstance(other, Var):
+            return VarMul(self, other)
+        else:
+            return Mul(self, other)
+
+    def __truediv__(self, other):
+        assert isinstance(other, Var)
+        return VarDiv(self, other)
 
     @property
     def fullname(self):
@@ -41,13 +54,15 @@ class Op:
         traversed.add(self)
         signals = []
         statements = []
-        for child in self.children:
+        for child in self.children + self.constraints:
             curr_signals, curr_statements = child._gen(traversed)
             signals += curr_signals
             statements += curr_statements
         if my_signals:
             signals += self._gen_signals()
         statements += self._gen_statements()
+        for constraint in self.constraints:
+            statements.append("{} === {};".format(self.fullname, constraint.fullname))
         return signals, statements
 
     def _gen_signals(self):
@@ -56,6 +71,89 @@ class Op:
 
     def _gen_statements(self):
         return []
+
+    def detach(self):
+        return VarInput(self)
+
+    def check_equals(self, other):
+        assert isinstance(other, Op)
+        assert not all([isinstance(self, Var), isinstance(other, Var)])
+        self.constraints.append(other)
+
+
+class Var(Op):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __add__(self, other):
+        assert isinstance(other, Op)
+        return VarAdd(self, other)
+
+    def __mul__(self, other):
+        assert isinstance(other, Op)
+        return VarMul(self, other)
+
+    def __truediv__(self, other):
+        assert isinstance(other, Op)
+        return VarDiv(self, other)
+
+    def _gen_statements(self):
+        statements = self._gen_statements()
+        for constraint in self.constraints:
+            statements.append("{} === {};", self.fullname, constraint.fullname)
+        return statements
+
+
+class VarInput(Var):
+    def __init__(self, signal):
+        super().__init__(children=[signal], name="var_{}".format(signal.name))
+
+    def _gen_statements(self):
+        [signal] = self.children
+        statement = "{} <-- {};".format(self.fullname, signal.fullname)
+        return [statement]
+
+
+class VarAdd(Var):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_plus_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} + {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarMul(Var):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_times_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} * {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarDiv(Var):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_div_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} / {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
 
 
 class Add(Op):
@@ -106,9 +204,7 @@ class Input(Op):
 if __name__ == "__main__":
     a = Input("a")
     b = Input("b", private=True)
-    c = Input("c")
-    d = (a + b) * c
-    e = a + (b * c)
-    f = d + e
-    circom = f.gen()
+    c = a.detach() / b
+    a.check_equals(c * b)
+    circom = c.gen()
     print(circom)
