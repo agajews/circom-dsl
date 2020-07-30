@@ -103,6 +103,9 @@ class Var(Op):
             statements.append("{} === {};", self.fullname, constraint.fullname)
         return statements
 
+    def attach(self):
+        return Attachment(self)
+
 
 class VarInput(Var):
     def __init__(self, signal):
@@ -156,6 +159,16 @@ class VarDiv(Var):
         return [statement]
 
 
+class Attachment(Op):
+    def __init__(self, var):
+        super().__init__(children=[var], name="sig_{}".format(var.name))
+
+    def _gen_statements(self):
+        [var] = self.children
+        statement = "{} <-- {};".format(self.fullname, var.fullname)
+        return [statement]
+
+
 class Add(Op):
     def __init__(self, left, right):
         super().__init__(
@@ -204,7 +217,7 @@ class Input(Op):
 if __name__ == "__main__":
     a = Input("a")
     b = Input("b", private=True)
-    c = a.detach() / b
+    c = (a.detach() / b).attach()
     a.check_equals(c * b)
     circom = c.gen()
     print(circom)
