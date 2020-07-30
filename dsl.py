@@ -1,9 +1,24 @@
 import textwrap
 
+_global_names = set()
+
 
 class Op:
+    def __init__(self, children, name):
+        self.children = children
+        self.name = name
+        if self.fullname in _global_names:
+            suffix = 0
+            while self.fullname in _global_names:
+                self.name = "{}_{}".format(name, suffix)
+                suffix += 1
+        _global_names.add(self.fullname)
+
     def __add__(self, other):
         return Add(self, other)
+
+    def __mul__(self, other):
+        return Mul(self, other)
 
     @property
     def fullname(self):
@@ -45,8 +60,9 @@ class Op:
 
 class Add(Op):
     def __init__(self, left, right):
-        self.children = [left, right]
-        self.name = "{}_plus_{}".format(left.name, right.name)
+        super().__init__(
+            children=[left, right], name="{}_plus_{}".format(left.name, right.name),
+        )
 
     def _gen_statements(self):
         [left, right] = self.children
@@ -56,10 +72,23 @@ class Add(Op):
         return [statement]
 
 
+class Mul(Op):
+    def __init__(self, left, right):
+        super().__init__(
+            children=[left, right], name="{}_times_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <== {} * {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
 class Input(Op):
     def __init__(self, name, private=False):
-        self.name = name
-        self.children = []
+        super().__init__(children=[], name=name)
         self.private = private
 
     def _gen_signals(self):
@@ -77,7 +106,9 @@ class Input(Op):
 if __name__ == "__main__":
     a = Input("a")
     b = Input("b", private=True)
-    c = a + b
-    d = a + c
-    circom = d.gen()
+    c = Input("c")
+    d = (a + b) * c
+    e = a + (b * c)
+    f = d + e
+    circom = f.gen()
     print(circom)
