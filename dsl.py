@@ -17,6 +17,8 @@ class Op:
             _global_names.add(self.fullname)
 
     def __add__(self, other):
+        if isinstance(other, int):
+            return Add(self, Constant(other))
         assert isinstance(other, Op)
         if isinstance(other, Var):
             return VarAdd(self, other)
@@ -24,6 +26,8 @@ class Op:
             return Add(self, other)
 
     def __mul__(self, other):
+        if isinstance(other, int):
+            return Mul(self, Constant(other))
         assert isinstance(other, Op)
         if isinstance(other, Var):
             return VarMul(self, other)
@@ -87,19 +91,38 @@ class Var(Op):
         super().__init__(*args, **kwargs)
 
     def __add__(self, other):
+        if isinstance(other, int):
+            return VarAdd(self, Constant(other))
         assert isinstance(other, Op)
         return VarAdd(self, other)
 
     def __mul__(self, other):
+        if isinstance(other, int):
+            return VarMul(self, Constant(other))
         assert isinstance(other, Op)
         return VarMul(self, other)
 
     def __truediv__(self, other):
+        if isinstance(other, int):
+            return VarDiv(self, Constant(other))
         assert isinstance(other, Op)
         return VarDiv(self, other)
 
     def attach(self):
         return Attachment(self)
+
+
+class Constant(Var):
+    def __init__(self, val):
+        super().__init__(children=[], name=str(val), passthrough=True)
+        self.val = val
+
+    @property
+    def fullname(self):
+        return str(self.val)
+
+    def _gen_signals(self):
+        return []
 
 
 class Detachment(Var):
