@@ -4,16 +4,17 @@ _global_names = set()
 
 
 class Op:
-    def __init__(self, children, name):
+    def __init__(self, children, name, passthrough=False):
         self.children = children
         self.constraints = []
         self.name = name
-        if self.fullname in _global_names:
+        if not passthrough and self.fullname in _global_names:
             suffix = 0
             while self.fullname in _global_names:
                 self.name = "{}_{}".format(name, suffix)
                 suffix += 1
-        _global_names.add(self.fullname)
+        if not passthrough:
+            _global_names.add(self.fullname)
 
     def __add__(self, other):
         assert isinstance(other, Op)
@@ -73,7 +74,7 @@ class Op:
         return []
 
     def detach(self):
-        return VarInput(self)
+        return Detachment(self)
 
     def check_equals(self, other):
         assert isinstance(other, Op)
@@ -97,24 +98,38 @@ class Var(Op):
         assert isinstance(other, Op)
         return VarDiv(self, other)
 
-    def _gen_statements(self):
-        statements = self._gen_statements()
-        for constraint in self.constraints:
-            statements.append("{} === {};", self.fullname, constraint.fullname)
-        return statements
-
     def attach(self):
         return Attachment(self)
 
 
-class VarInput(Var):
+class Detachment(Var):
     def __init__(self, signal):
-        super().__init__(children=[signal], name="var_{}".format(signal.name))
+        super().__init__(children=[signal], name=signal.name, passthrough=True)
 
-    def _gen_statements(self):
+    @property
+    def fullname(self):
         [signal] = self.children
-        statement = "{} <-- {};".format(self.fullname, signal.fullname)
-        return [statement]
+        return signal.fullname
+
+    def _gen_signals(self):
+        return []
+
+
+class Attachment(Op):
+    def __init__(self, var):
+        super().__init__(children=[var], name=var.name, passthrough=True)
+
+    @property
+    def fullname(self):
+        [var] = self.children
+        return var.fullname
+
+    def _gen_signals(self):
+        return []
+
+    def gen(self):
+        [var] = self.children
+        return var.gen()
 
 
 class VarAdd(Var):
@@ -156,16 +171,6 @@ class VarDiv(Var):
         statement = "{} <-- {} / {};".format(
             self.fullname, left.fullname, right.fullname
         )
-        return [statement]
-
-
-class Attachment(Op):
-    def __init__(self, var):
-        super().__init__(children=[var], name="sig_{}".format(var.name))
-
-    def _gen_statements(self):
-        [var] = self.children
-        statement = "{} <-- {};".format(self.fullname, var.fullname)
         return [statement]
 
 
