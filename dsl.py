@@ -1,25 +1,56 @@
 import textwrap
 
-_global_names = set()
+
+class Session:
+    def __init__(self):
+        self.names = {}
+        self.constraints = []
+
+    def input(self, name, private=False):
+        if name in self.names:
+            raise Exception("input named {} not unique in the session".format(name))
+        self.names.add(name)
+        return Input(self, name, private)
+
+    def gen(self, output):
+        traversed = set()
+        signals, statements = output._gen(traversed, my_signals=False)
+        for left, right in self.constraints:
+            curr_signals, curr_statements = left._gen(traversed)
+            signals += curr_signals
+            statements += curr_statements
+            curr_signals, curr_statements = right._gen(traversed)
+            signals += curr_signals
+            statements += curr_statements
+            statements.append("{} === {};".format(left.fullname, right.fullname))
+
+        output = "signal output {};".format(self.fullname)
+        signals.append(output)
+
+        main = "\n".join(signals) + "\n\n" + "\n".join(statements)
+        circom = "template Main() {{\n{}\n}}\n\ncomponent main = Main();".format(
+            textwrap.indent(main, "    ")
+        )
+        return circom
 
 
 class Op:
-    def __init__(self, children, name, passthrough=False):
-        self.generated = False
+    def __init__(self, sess, children, name, passthrough=False):
+        self.sess = sess
         self.children = children
         self.constraints = []
         self.name = name
-        if not passthrough and self.fullname in _global_names:
+        if not passthrough and self.fullname in sess.names:
             suffix = 0
-            while self.fullname in _global_names:
+            while self.fullname in sess.names:
                 self.name = "{}_{}".format(name, suffix)
                 suffix += 1
         if not passthrough:
-            _global_names.add(self.fullname)
+            sess.names.add(self.fullname)
 
     def __add__(self, other):
         if isinstance(other, int):
-            return Add(self, Constant(other))
+            return Add(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         if isinstance(other, Var):
             return VarAdd(self, other)
@@ -28,7 +59,7 @@ class Op:
 
     def __sub__(self, other):
         if isinstance(other, int):
-            return Sub(self, Constant(other))
+            return Sub(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         if isinstance(other, Var):
             return VarSub(self, other)
@@ -37,7 +68,7 @@ class Op:
 
     def __mul__(self, other):
         if isinstance(other, int):
-            return Mul(self, Constant(other))
+            return Mul(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         if isinstance(other, Var):
             return VarMul(self, other)
@@ -56,17 +87,6 @@ class Op:
     def fullname(self):
         return "{}__".format(self.name)
 
-    def gen(self):
-        signals, statements = self._gen(set(), my_signals=False)
-        output = "signal output {};".format(self.fullname)
-        signals.append(output)
-
-        main = "\n".join(signals) + "\n\n" + "\n".join(statements)
-        circom = "template Main() {{\n{}\n}}\n\ncomponent main = Main();".format(
-            textwrap.indent(main, "    ")
-        )
-        return circom
-
     def _gen(self, traversed, my_signals=True):
         self.generated = True
         if self in traversed:
@@ -74,16 +94,13 @@ class Op:
         traversed.add(self)
         signals = []
         statements = []
-        constraint_children = [child for tup in self.constraints for child in tup]
-        for child in self.children + constraint_children:
+        for child in self.children:
             curr_signals, curr_statements = child._gen(traversed)
             signals += curr_signals
             statements += curr_statements
         if my_signals:
             signals += self._gen_signals()
         statements += self._gen_statements()
-        for left, right in self.constraints:
-            statements.append("{} === {};".format(left.fullname, right.fullname))
         return signals, statements
 
     def _gen_signals(self):
@@ -96,22 +113,11 @@ class Op:
     def detach(self):
         return Detachment(self)
 
-    def check_equals(self, left, right):
-        if isinstance(left, int):
-            left = Constant(left)
-        if isinstance(right, int):
-            right = Constant(right)
-        assert all([isinstance(left, Op), isinstance(right, Op)])
-        assert not any([isinstance(left, Var), isinstance(right, Var)])
-        self.constraints.append((left, right))
-
-    def __del__(self):
-        if not self.generated:
-            raise Exception(
-                "node {} created but not used, you might have added a constraint to an isolated variable".format(
-                    self.fullname
-                )
-            )
+    def check_equals(self, other):
+        if isinstance(other, int):
+            other = Constant(other)
+        assert isinstance(other, Op)
+        self.sess.constraints.append((self, other))
 
 
 class Var(Op):
@@ -120,31 +126,31 @@ class Var(Op):
 
     def __add__(self, other):
         if isinstance(other, int):
-            return VarAdd(self, Constant(other))
+            return VarAdd(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         return VarAdd(self, other)
 
     def __sub__(self, other):
         if isinstance(other, int):
-            return VarSub(self, Constant(other))
+            return VarSub(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         return VarSub(self, other)
 
     def __mul__(self, other):
         if isinstance(other, int):
-            return VarMul(self, Constant(other))
+            return VarMul(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         return VarMul(self, other)
 
     def __truediv__(self, other):
         if isinstance(other, int):
-            return VarDiv(self, Constant(other))
+            return VarDiv(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         return VarDiv(self, other)
 
     def __mod__(self, other):
         if isinstance(other, int):
-            return VarMod(self, Constant(other))
+            return VarMod(self, Constant(self.sess, other))
         assert isinstance(other, Op)
         return VarMod(self, other)
 
@@ -153,8 +159,10 @@ class Var(Op):
 
 
 class Constant(Op):
-    def __init__(self, val):
-        super().__init__(children=[], name="c{}".format(val), passthrough=True)
+    def __init__(self, sess, val):
+        super().__init__(
+            sess=sess, children=[], name="c{}".format(val), passthrough=True
+        )
         self.val = val
 
     @property
@@ -167,7 +175,9 @@ class Constant(Op):
 
 class Detachment(Var):
     def __init__(self, signal):
-        super().__init__(children=[signal], name=signal.name, passthrough=True)
+        super().__init__(
+            sess=signal.sess, children=[signal], name=signal.name, passthrough=True
+        )
 
     @property
     def fullname(self):
@@ -180,7 +190,7 @@ class Detachment(Var):
 
 class Attachment(Op):
     def __init__(self, var):
-        super().__init__(children=[var], name=var.name, passthrough=True)
+        super().__init__(sess=var.sess, children=[var], name=var.name, passthrough=True)
 
     @property
     def fullname(self):
@@ -197,8 +207,11 @@ class Attachment(Op):
 
 class VarAdd(Var):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_plus_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_plus_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -211,8 +224,11 @@ class VarAdd(Var):
 
 class VarSub(Var):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_minus_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_minus_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -225,8 +241,11 @@ class VarSub(Var):
 
 class VarMul(Var):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_times_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_times_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -239,8 +258,11 @@ class VarMul(Var):
 
 class VarDiv(Var):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_div_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_div_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -253,8 +275,11 @@ class VarDiv(Var):
 
 class VarMod(Var):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_mod_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_mod_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -267,8 +292,11 @@ class VarMod(Var):
 
 class Add(Op):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_plus_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_plus_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -281,8 +309,11 @@ class Add(Op):
 
 class Sub(Op):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_minus_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_minus_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -295,8 +326,11 @@ class Sub(Op):
 
 class Mul(Op):
     def __init__(self, left, right):
+        assert left.sess is right.sess
         super().__init__(
-            children=[left, right], name="{}_times_{}".format(left.name, right.name),
+            sess=left.sess,
+            children=[left, right],
+            name="{}_times_{}".format(left.name, right.name),
         )
 
     def _gen_statements(self):
@@ -308,8 +342,8 @@ class Mul(Op):
 
 
 class Input(Op):
-    def __init__(self, name, private=False):
-        super().__init__(children=[], name=name)
+    def __init__(self, sess, name, private=False):
+        super().__init__(sess, children=[])
         self.private = private
 
     def _gen_signals(self):

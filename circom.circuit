@@ -1,0 +1,12 @@
+template Main() {
+    signal private input b;
+    signal b_times_a_div_b__;
+    signal input a;
+    signal output a_div_b__;
+
+    b_times_a_div_b__ <== b * a_div_b__;
+    a === b_times_a_div_b__;
+    a_div_b__ <-- a / b;
+}
+
+component main = Main();
