@@ -1,9 +1,10 @@
-from dsl import Input
+from dsl import Session
 
 
-a = Input("a")
-b = Input("b", private=True)
+sess = Session()
+a = sess.input("a")
+b = sess.input("b", private=True)
 c = (a.detach() / b).attach()
-a.check_equals(a, c * b)
-circom = c.gen()
+a.check_equals(c * b)
+circom = sess.gen(c)
 print(circom)

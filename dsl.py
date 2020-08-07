@@ -3,14 +3,16 @@ import textwrap
 
 class Session:
     def __init__(self):
-        self.names = {}
+        self.names = set()
         self.constraints = []
 
     def input(self, name, private=False):
         if name in self.names:
             raise Exception("input named {} not unique in the session".format(name))
-        self.names.add(name)
         return Input(self, name, private)
+
+    def constant(self, val):
+        return Constant(self, val)
 
     def gen(self, output):
         traversed = set()
@@ -24,8 +26,8 @@ class Session:
             statements += curr_statements
             statements.append("{} === {};".format(left.fullname, right.fullname))
 
-        output = "signal output {};".format(self.fullname)
-        signals.append(output)
+        output_text = "signal output {};".format(output.fullname)
+        signals.append(output_text)
 
         main = "\n".join(signals) + "\n\n" + "\n".join(statements)
         circom = "template Main() {{\n{}\n}}\n\ncomponent main = Main();".format(
@@ -115,7 +117,7 @@ class Op:
 
     def check_equals(self, other):
         if isinstance(other, int):
-            other = Constant(other)
+            other = Constant(self.sess, other)
         assert isinstance(other, Op)
         self.sess.constraints.append((self, other))
 
@@ -343,7 +345,7 @@ class Mul(Op):
 
 class Input(Op):
     def __init__(self, sess, name, private=False):
-        super().__init__(sess, children=[])
+        super().__init__(sess=sess, name=name, children=[])
         self.private = private
 
     def _gen_signals(self):
