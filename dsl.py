@@ -291,8 +291,9 @@ class Detachment(Var):
         [signal] = self.children
         return signal.fullname
 
-    def _gen_signals(self):
-        return []
+    def _gen(self, *args, **kwargs):
+        [signal] = self.children
+        return signal._gen(*args, **kwargs)
 
 
 class Attachment(Op):
@@ -304,12 +305,9 @@ class Attachment(Op):
         [var] = self.children
         return var.fullname
 
-    def _gen_signals(self):
-        return []
-
-    def gen(self):
+    def _gen(self, *args, **kwargs):
         [var] = self.children
-        return var.gen()
+        return var._gen(*args, **kwargs)
 
 
 class VarAdd(Var):
