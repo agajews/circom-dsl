@@ -7,8 +7,8 @@ sess = Session()
 dividend = sess.input("dividend")
 divisor = sess.input("divisor", private=True)
 
-quotient = (dividend.detach() / divisor).attach()
 remainder = (dividend.detach() % divisor).attach()
+quotient = ((dividend.detach() - remainder) / divisor).attach()
 
 dividend.check_equals(divisor * quotient + remainder)
 
