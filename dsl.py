@@ -4,7 +4,9 @@ import textwrap
 class Session:
     def __init__(self):
         self.names = set()
+        self.component_names = set()
         self.constraints = []
+        self.includes = set()
 
     def input(self, name, private=False):
         if name in self.names:
@@ -15,6 +17,7 @@ class Session:
         return Constant(self, val)
 
     def gen(self, output):
+        includes = ['include "{}"'.format(path) for path in self.includes]
         traversed = set()
         signals, statements = output._gen(traversed, my_signals=False)
         for left, right in self.constraints:
@@ -30,10 +33,71 @@ class Session:
         signals.append(output_text)
 
         main = "\n".join(signals) + "\n\n" + "\n".join(statements)
-        circom = "template Main() {{\n{}\n}}\n\ncomponent main = Main();".format(
-            textwrap.indent(main, "    ")
+        circom = "{}\n\ntemplate Main() {{\n{}\n}}\n\ncomponent main = Main();".format(
+            "\n".join(includes), textwrap.indent(main, "    ")
         )
         return circom
+
+    def include(self, path):
+        self.includes.add(path)
+
+    def extern(self, name, inputs, output, args=[]):
+        return Extern(self, name, inputs, output, args)
+
+
+class Extern:
+    def __init__(self, sess, name, inputs, output, args):
+        self.sess = sess
+        self.name = name
+        self.inputs = inputs
+        for name, val in inputs.items():
+            if isinstance(val, list):
+                assert len(val) == 1
+                assert isinstance(val[0], int)
+            else:
+                assert isinstance(val, int)
+        self.output = output
+        assert isinstance(output, str)
+        self.args = args
+
+    def strip_underscores(self, kwargs):
+        new_kwargs = {}
+        for k, v in kwargs.items():
+            if k.startswith("_"):
+                k = k[1:]
+            new_kwargs[k] = v
+        return new_kwargs
+
+    def __call__(self, **kwargs):
+        kwargs = self.strip_underscores(kwargs)
+        assignments = []
+        children = []
+        for name, typ in self.inputs.items():
+            assert name in kwargs
+            arg = kwargs[name]
+            if isinstance(typ, list):
+                assert isinstance(arg, list)
+                assert len(arg) == typ[0]
+                for child in arg:
+                    assert isinstance(child, Op)
+                    assert child.sess is self.sess
+                    children.append(child)
+                assignments.append((name, arg))
+            else:
+                assert isinstance(arg, Op)
+                assert child.sess is self.sess
+                children.append(arg)
+                assignments.append((name, arg))
+        output_name = children[0].name + "_" + self.name
+        return ExternOp(
+            self.sess,
+            self.name,
+            output_name,
+            self.output,
+            children,
+            assignments,
+            self.args,
+        )
 
 
 class Op:
@@ -120,6 +184,47 @@ class Op:
             other = Constant(self.sess, other)
         assert isinstance(other, Op)
         self.sess.constraints.append((self, other))
+
+
+class ExternOp(Op):
+    def __init__(
+        self, sess, extern_name, output_name, output_prop, children, assignments, args
+    ):
+        super().__init__(
+            sess=sess, children=children, name=output_name,
+        )
+        self.extern_name = extern_name
+        self.assignments = assignments
+        self.args = args
+        self.output_prop = output_prop
+        suffix = 0
+        self.component_name = "{}_{}".format(extern_name, suffix)
+        while self.component_name in sess.component_names:
+            suffix += 1
+            self.component_name = "{}_{}".format(extern_name, suffix)
+        sess.component_names.add(self.component_name)
+
+    def _gen_statements(self):
+        component = "component {} = {}({});".format(
+            self.component_name, self.extern_name, ", ".join(str(x) for x in self.args),
+        )
+        statements = [component]
+        for arg_name, args in self.assignments:
+            if isinstance(args, list):
+                for i, arg in enumerate(args):
+                    statements.append(
+                        "{}.{}[{}] <== {};".format(
+                            self.component_name, arg_name, i, arg.fullname
+                        )
+                    )
+            else:
+                statements.append(
+                    "{}.{} <== {};".format(self.component_name, arg_name, arg.fullname)
+                )
+        statements.append(
+            "{} <== {}.{};".format(self.fullname, self.component_name, self.output_prop)
+        )
+        return statements
 
 
 class Var(Op):
