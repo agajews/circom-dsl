@@ -57,7 +57,11 @@ class Extern:
             else:
                 assert isinstance(val, int)
         self.output = output
-        assert isinstance(output, str)
+        if isinstance(output, list):
+            assert len(output) == 1
+            assert isinstance(output[0], str)
+        else:
+            assert isinstance(output, str)
         self.args = args
 
     def strip_underscores(self, kwargs):
@@ -88,16 +92,11 @@ class Extern:
                 assert child.sess is self.sess
                 children.append(arg)
                 assignments.append((name, arg))
-        output_name = children[0].name + "_" + self.name
-        return ExternOp(
-            self.sess,
-            self.name,
-            output_name,
-            self.output,
-            children,
-            assignments,
-            self.args,
-        )
+        extern_op = ExternOp(self.sess, self.name, children, assignments, self.args,)
+
+        if isinstance(self.output, list):
+            return ExternArray(extern_op, self.output[0])
+        return ExternOutput(extern_op, self.output)
 
 
 class Op:
@@ -187,16 +186,13 @@ class Op:
 
 
 class ExternOp(Op):
-    def __init__(
-        self, sess, extern_name, output_name, output_prop, children, assignments, args
-    ):
+    def __init__(self, sess, extern_name, children, assignments, args):
         super().__init__(
-            sess=sess, children=children, name=output_name,
+            sess=sess, children=children, name=extern_name, passthrough=True,
         )
         self.extern_name = extern_name
         self.assignments = assignments
         self.args = args
-        self.output_prop = output_prop
         suffix = 0
         self.component_name = "{}_{}".format(extern_name, suffix)
         while self.component_name in sess.component_names:
@@ -221,10 +217,65 @@ class ExternOp(Op):
                 statements.append(
                     "{}.{} <== {};".format(self.component_name, arg_name, arg.fullname)
                 )
-        statements.append(
-            "{} <== {}.{};".format(self.fullname, self.component_name, self.output_prop)
-        )
         return statements
+
+
+class ExternOutput(Op):
+    def __init__(self, extern_op, output_prop):
+        super().__init__(
+            sess=extern_op.sess,
+            children=[extern_op],
+            name=extern_op.name,
+            passthrough=True,
+        )
+        self.extern_op = extern_op
+        self.output_prop = output_prop
+
+    @property
+    def fullname(self):
+        return "{}.{}".format(self.extern_op.component_name, self.output_prop)
+
+    def _gen_statements(self):
+        return []
+
+    def _gen_signals(self):
+        return []
+
+
+class ExternArray:
+    def __init__(self, extern_op, output_prop):
+        self.extern_op = extern_op
+        self.output_prop = output_prop
+
+    def __getitem__(self, index):
+        assert isinstance(index, int)
+        return ExternArrayElem(self.extern_op, self.output_prop, index)
+
+
+class ExternArrayElem(Op):
+    def __init__(self, extern_op, output_prop, index):
+        super().__init__(
+            self,
+            sess=extern_op.sess,
+            name=extern_op.name,
+            children=[extern_op],
+            passthrough=True,
+        )
+        self.extern_op = extern_op
+        self.output_prop = output_prop
+        self.index = index
+
+    @property
+    def fullname(self):
+        return "{}.{}[{}]".format(
+            self.extern_op.component_name, self.output_prop, self.index
+        )
+
+    def _gen_statements(self):
+        return []
+
+    def _gen_signals(self):
+        return []
 
 
 class Var(Op):
