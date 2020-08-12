@@ -27,4 +27,6 @@ def is_negative(x):
 
 
 a = sess.input("a")
-print(sess.gen(is_negative(a)))
+b = sess.input("b")
+scale = sess.input("scale")
+print(sess.gen(random(a, b, scale)))

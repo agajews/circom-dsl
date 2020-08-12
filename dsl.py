@@ -85,16 +85,20 @@ class Extern:
                 assert isinstance(arg, list)
                 assert len(arg) == typ[0]
                 for child in arg:
+                    if isinstance(child, int):
+                        child = self.sess.constant(child)
                     assert isinstance(child, Op)
                     assert child.sess is self.sess
                     children.append(child)
                 assignments.append((name, arg))
             else:
+                if isinstance(arg, int):
+                    arg = self.sess.constant(arg)
                 assert isinstance(arg, Op)
                 assert arg.sess is self.sess
                 children.append(arg)
                 assignments.append((name, arg))
-        extern_op = ExternOp(self.sess, self.name, children, assignments, self.args,)
+        extern_op = ExternOp(self.sess, self.name, children, assignments, self.args)
 
         if isinstance(self.output, list):
             return ExternArray(extern_op, self.output[0])
