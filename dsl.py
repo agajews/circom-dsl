@@ -225,7 +225,7 @@ class ExternOutput(Op):
         super().__init__(
             sess=extern_op.sess,
             children=[extern_op],
-            name=extern_op.name,
+            name=extern_op.component_name,
             passthrough=True,
         )
         self.extern_op = extern_op
@@ -257,7 +257,7 @@ class ExternArrayElem(Op):
         super().__init__(
             self,
             sess=extern_op.sess,
-            name=extern_op.name,
+            name=extern_op.component_name,
             children=[extern_op],
             passthrough=True,
         )
