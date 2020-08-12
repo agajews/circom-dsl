@@ -17,6 +17,8 @@ class Session:
         return Constant(self, val)
 
     def gen(self, output):
+        if output.passthrough:
+            output = IdentityOp(output)
         includes = ['include "{}"'.format(path) for path in self.includes]
         traversed = set()
         signals, statements = output._gen(traversed, my_signals=False)
@@ -89,7 +91,7 @@ class Extern:
                 assignments.append((name, arg))
             else:
                 assert isinstance(arg, Op)
-                assert child.sess is self.sess
+                assert arg.sess is self.sess
                 children.append(arg)
                 assignments.append((name, arg))
         extern_op = ExternOp(self.sess, self.name, children, assignments, self.args,)
@@ -112,6 +114,7 @@ class Op:
                 suffix += 1
         if not passthrough:
             sess.names.add(self.fullname)
+        self.passthrough = passthrough
 
     def __add__(self, other):
         if isinstance(other, int):
@@ -215,7 +218,7 @@ class ExternOp(Op):
                     )
             else:
                 statements.append(
-                    "{}.{} <== {};".format(self.component_name, arg_name, arg.fullname)
+                    "{}.{} <== {};".format(self.component_name, arg_name, args.fullname)
                 )
         return statements
 
@@ -255,7 +258,6 @@ class ExternArray:
 class ExternArrayElem(Op):
     def __init__(self, extern_op, output_prop, index):
         super().__init__(
-            self,
             sess=extern_op.sess,
             name=extern_op.component_name,
             children=[extern_op],
@@ -494,6 +496,16 @@ class Mul(Op):
         statement = "{} <== {} * {};".format(
             self.fullname, left.fullname, right.fullname
         )
+        return [statement]
+
+
+class IdentityOp(Op):
+    def __init__(self, signal):
+        super().__init__(sess=signal.sess, children=[signal], name=signal.name)
+
+    def _gen_statements(self):
+        [signal] = self.children
+        statement = "{} <== {};".format(self.fullname, signal.fullname)
         return [statement]
 
 
