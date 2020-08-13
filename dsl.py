@@ -229,6 +229,9 @@ class ExternOp(Op):
                 )
         return statements
 
+    def _gen_signals(self):
+        return []
+
 
 class ExternOutput(Op):
     def __init__(self, extern_op, output_prop):
@@ -346,7 +349,7 @@ class Var(Op):
 class Constant(Op):
     def __init__(self, sess, val):
         super().__init__(
-            sess=sess, children=[], name="c{}".format(val), passthrough=True
+            sess=sess, children=[], name="c{}".format(abs(val)), passthrough=True
         )
         self.val = val
 
@@ -501,7 +504,7 @@ class VarCond(Var):
 
     def _gen_statements(self):
         [pred, left, right] = self.children
-        statement = "if ({}) {{ {} <-- {}; }} else {{ {} <-- {}; }}".format(
+        statement = "if ({} == 1) {{ {} <-- {}; }} else {{ {} <-- {}; }}".format(
             pred.fullname, self.fullname, left.fullname, self.fullname, right.fullname
         )
         return [statement]

@@ -51,15 +51,18 @@ def check_multi_range(a, b, c):
 
 def modulo(dividend, divisor):
     raw_remainder = abs(dividend).detach() % divisor
+    # remainder = sess.cond(
+    #     is_negative(dividend).detach() & raw_remainder != 0,
+    #     divisor - raw_remainder,
+    #     raw_remainder,
+    # ).attach()
     remainder = sess.cond(
-        is_negative(dividend).detach() & raw_remainder != 0,
-        divisor - raw_remainder,
-        raw_remainder,
+        raw_remainder != 0, divisor - raw_remainder, raw_remainder,
     ).attach()
     quotient = ((dividend.detach() - remainder) / divisor).attach()
     (divisor * quotient + remainder).check_equals(dividend)
-    check_less_than(remainder, divisor)
-    check_multi_range(divisor, quotient, dividend)
+    # check_less_than(remainder, divisor)
+    # check_multi_range(divisor, quotient, dividend)
     return (quotient, remainder)
 
 
