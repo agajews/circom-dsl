@@ -13,6 +13,17 @@ num2bits = sess.extern("Num2Bits", args=[254], inputs={"in": 1}, output=["out"])
 sess.include("circomlib/circuits/sign.circom")
 sign = sess.extern("Sign", inputs={"in": [254]}, output="sign")
 
+sess.include("circomlib/circuits/comparators.circom")
+lessthan = sess.extern("LessThan", args=[254], inputs={"in": [2]}, output="out")
+
+sess.include("range_proof/circuit.circom")
+multirangeproof = sess.extern(
+    "MultiRangeProof",
+    args=[3, 128, 1000000000000000000000000000000000000],
+    inputs={"in": [3]},
+    output="out",
+)
+
 
 def random(x, y, scale):
     full_random = mimc_sponge(_in=[x, y, scale], k=0)
@@ -24,6 +35,32 @@ def random(x, y, scale):
 def is_negative(x):
     bits = num2bits(_in=x)
     return sign(_in=[bits[i] for i in range(254)])
+
+
+def abs(x):
+    return x * (1 + is_negative(x) * -2)
+
+
+def check_less_than(a, b):
+    lessthan(_in=[a, b]).check_equals(1)
+
+
+def check_multi_range(a, b, c):
+    multirangeproof(_in=[a, b, c]).check_equals(1)
+
+
+def modulo(dividend, divisor):
+    raw_remainder = abs(dividend).detach() % divisor
+    remainder = sess.cond(
+        is_negative(dividend).detach() & raw_remainder != 0,
+        divisor - raw_remainder,
+        raw_remainder,
+    ).attach()
+    quotient = ((dividend.detach() - remainder) / divisor).attach()
+    (divisor * quotient + remainder).check_equals(dividend)
+    check_less_than(remainder, divisor)
+    check_multi_range(divisor, quotient, dividend)
+    return (quotient, remainder)
 
 
 a = sess.input("a")

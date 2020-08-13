@@ -161,9 +161,9 @@ class Op:
 
     def _gen(self, traversed, my_signals=True):
         self.generated = True
-        if self in traversed:
+        if id(self) in traversed:
             return [], []
-        traversed.add(self)
+        traversed.add(id(self))
         signals = []
         statements = []
         for child in self.children:
@@ -318,6 +318,24 @@ class Var(Op):
         assert isinstance(other, Op)
         return VarMod(self, other)
 
+    def __eq__(self, other):
+        if isinstance(other, int):
+            other = self.sess.constant(other)
+        assert isinstance(other, Op)
+        return VarEq(self, other)
+
+    def __ne__(self, other):
+        if isinstance(other, int):
+            other = self.sess.constant(other)
+        assert isinstance(other, Op)
+        return VarNeq(self, other)
+
+    def __and__(self, other):
+        if isinstance(other, int):
+            other = self.sess.constant(other)
+        assert isinstance(other, Op)
+        return VarAnd(self, other)
+
     def attach(self):
         return Attachment(self)
 
@@ -413,6 +431,57 @@ class VarMul(Var):
     def _gen_statements(self):
         [left, right] = self.children
         statement = "{} <-- {} * {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarEq(Var):
+    def __init__(self, left, right):
+        assert left.sess is right.sess
+        super().__init__(
+            sess=left.sess,
+            children=[left, right],
+            name="{}_eq_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} == {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarNeq(Var):
+    def __init__(self, left, right):
+        assert left.sess is right.sess
+        super().__init__(
+            sess=left.sess,
+            children=[left, right],
+            name="{}_neq_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} != {};".format(
+            self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarAnd(Var):
+    def __init__(self, left, right):
+        assert left.sess is right.sess
+        super().__init__(
+            sess=left.sess,
+            children=[left, right],
+            name="{}_and_{}".format(left.name, right.name),
+        )
+
+    def _gen_statements(self):
+        [left, right] = self.children
+        statement = "{} <-- {} && {};".format(
             self.fullname, left.fullname, right.fullname
         )
         return [statement]
