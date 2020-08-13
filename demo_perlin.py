@@ -38,7 +38,7 @@ def is_negative(x):
 
 
 def abs(x):
-    return x * (1 + is_negative(x) * -2)
+    return x * (is_negative(x) * -2 + 1)
 
 
 def check_less_than(a, b):
@@ -65,5 +65,5 @@ def modulo(dividend, divisor):
 
 a = sess.input("a")
 b = sess.input("b")
-scale = sess.input("scale")
-print(sess.gen(random(a, b, scale)))
+(quotient, remainder) = modulo(a, b)
+print(sess.gen(remainder))

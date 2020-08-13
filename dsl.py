@@ -46,6 +46,9 @@ class Session:
     def extern(self, name, inputs, output, args=[]):
         return Extern(self, name, inputs, output, args)
 
+    def cond(self, pred, left, right):
+        return VarCond(pred, left, right)
+
 
 class Extern:
     def __init__(self, sess, name, inputs, output, args):
@@ -483,6 +486,23 @@ class VarAnd(Var):
         [left, right] = self.children
         statement = "{} <-- {} && {};".format(
             self.fullname, left.fullname, right.fullname
+        )
+        return [statement]
+
+
+class VarCond(Var):
+    def __init__(self, pred, left, right):
+        assert pred.sess is left.sess and left.sess is right.sess
+        super().__init__(
+            sess=left.sess,
+            children=[pred, left, right],
+            name="if_{}".format(pred.name),
+        )
+
+    def _gen_statements(self):
+        [pred, left, right] = self.children
+        statement = "if ({}) {{ {} <-- {}; }} else {{ {} <-- {}; }}".format(
+            pred.fullname, self.fullname, left.fullname, self.fullname, right.fullname
         )
         return [statement]
 
