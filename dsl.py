@@ -85,15 +85,18 @@ class Extern:
             assert name in kwargs
             arg = kwargs[name]
             if isinstance(typ, list):
-                assert isinstance(arg, list)
-                assert len(arg) == typ[0]
-                for child in arg:
-                    if isinstance(child, int):
-                        child = self.sess.constant(child)
-                    assert isinstance(child, Op)
-                    assert child.sess is self.sess
-                    children.append(child)
-                assignments.append((name, arg))
+                if isinstance(arg, list):
+                    assert len(arg) == typ[0]
+                    for child in arg:
+                        if isinstance(child, int):
+                            child = self.sess.constant(child)
+                        assert isinstance(child, Op)
+                        assert child.sess is self.sess
+                        children.append(child)
+                    assignments.append((name, arg))
+                else:
+                    assert isinstance(arg, ExternArray)
+                    assignments.append(((name, typ[0]), arg))
             else:
                 if isinstance(arg, int):
                     arg = self.sess.constant(arg)
@@ -223,6 +226,16 @@ class ExternOp(Op):
                             self.component_name, arg_name, i, arg.fullname
                         )
                     )
+            elif isinstance(args, ExternArray):
+                statements.append(
+                    "for (var i__ = 0; i__ < {size}; i++) {{\n    {comp}.{arg_name}[i__] <== {extern_component}.{extern_prop}[i__]\n}}".format(
+                        size=arg_name[1],
+                        comp=self.component_name,
+                        arg_name=arg_name[0],
+                        extern_component=args.extern_op.component_name,
+                        extern_prop=args.output_prop,
+                    )
+                )
             else:
                 statements.append(
                     "{}.{} <== {};".format(self.component_name, arg_name, args.fullname)

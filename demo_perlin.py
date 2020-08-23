@@ -33,8 +33,7 @@ def random(x, y, scale):
 
 
 def is_negative(x):
-    bits = num2bits(_in=x)
-    return sign(_in=[bits[i] for i in range(254)])
+    return sign(_in=num2bits(_in=x))
 
 
 def abs(x):
