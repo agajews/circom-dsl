@@ -97,6 +97,7 @@ class Extern:
                 else:
                     assert isinstance(arg, ExternArray)
                     assignments.append(((name, typ[0]), arg))
+                    children.append(arg)
             else:
                 if isinstance(arg, int):
                     arg = self.sess.constant(arg)
@@ -228,7 +229,7 @@ class ExternOp(Op):
                     )
             elif isinstance(args, ExternArray):
                 statements.append(
-                    "for (var i__ = 0; i__ < {size}; i++) {{\n    {comp}.{arg_name}[i__] <== {extern_component}.{extern_prop}[i__]\n}}".format(
+                    "for (var i__ = 0; i__ < {size}; i__++) {{\n    {comp}.{arg_name}[i__] <== {extern_component}.{extern_prop}[i__]\n}}".format(
                         size=arg_name[1],
                         comp=self.component_name,
                         arg_name=arg_name[0],
@@ -268,8 +269,14 @@ class ExternOutput(Op):
         return []
 
 
-class ExternArray:
+class ExternArray(Op):
     def __init__(self, extern_op, output_prop):
+        super().__init__(
+            sess=extern_op.sess,
+            name=extern_op.component_name,
+            children=[extern_op],
+            passthrough=True,
+        )
         self.extern_op = extern_op
         self.output_prop = output_prop
 
