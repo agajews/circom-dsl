@@ -1,9 +1,9 @@
 from dsl import Session
 
+sess = Session()
+
 BIGNUM = 1649267441664000
 SCALE_BITS = 16
-
-sess = Session()
 
 sess.include("circomlib/circuits/mimcsponge.circom")
 mimc_sponge = sess.extern(
@@ -28,7 +28,7 @@ multirangeproof = sess.extern(
 
 sess.include("QuinSelector.circom")
 quinselector = sess.extern(
-    "QuinSelector", args=[SCALE_BITS], inputs={"in": SCALE_BITS}, output="out"
+    "QuinSelector", args=[SCALE_BITS], inputs={"in": [SCALE_BITS]}, output="out"
 )
 
 
@@ -89,7 +89,7 @@ def random_gradient_at(x, y, scale):
         (923, -383),
     ]
 
-    denom = BIGNUM / 1000
+    denom = BIGNUM // 1000
 
     index = random(x, y, scale)
     x = quinselector(_in=[x for x, y in vecs], index=index)
@@ -121,13 +121,20 @@ def get_weight(corner, p, is_bottom, is_left):
         p[0] - corner[0] if is_left else corner[0] - p[0],
         p[1] - corner[1] if is_bottom else corner[1] - p[1],
     )
-    numer = (BIGNUM - diff[0]) * (BIGNUM - diff[1])
+    numer = (sess.constant(BIGNUM) - diff[0]) * (sess.constant(BIGNUM) - diff[1])
     return div(numer, BIGNUM)
 
 
 def dot(a, b):
     sum = a[0] * b[0] + a[1] * b[1]
     return div(sum, BIGNUM)
+
+
+def summation(xs):
+    out = xs[0]
+    for x in xs[1:]:
+        out = out + x
+    return out
 
 
 def perlin_value(coords, grads, p, scale):
@@ -142,16 +149,16 @@ def perlin_value(coords, grads, p, scale):
         weight = get_weight(corner, p, is_bottom, is_left)
         outputs.append(div(dot_prod * weight, BIGNUM))
 
-    return sum(outputs)
+    return summation(outputs)
 
 
 def single_scale_perlin(p, scale):
     coords, grads = get_corners_and_grad_vectors(p[0], p[1], scale)
-    p = (BIGNUM * p[0], BIGNUM * p[1])
-    coords = [(BIGNUM * x, BIGNUM * y) for x, y in coords]
+    p = (p[0] * BIGNUM, p[1] * BIGNUM)
+    coords = [(x * BIGNUM, y * BIGNUM) for x, y in coords]
     return perlin_value(coords, grads, p, scale)
 
 
 p = (sess.input("p0"), sess.input("p1"))
-z = single_scale_perlin(p, 2048)
+z = single_scale_perlin(p, sess.constant(2048))
 print(sess.gen(z))

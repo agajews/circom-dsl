@@ -95,9 +95,10 @@ class Extern:
             if isinstance(typ, list):
                 if isinstance(arg, list):
                     assert len(arg) == typ[0]
-                    for child in arg:
+                    for i, child in enumerate(arg):
                         if isinstance(child, int):
                             child = self.sess.constant(child)
+                            arg[i] = child
                         assert isinstance(child, Op)
                         assert child.sess is self.sess
                         children.append(child)
@@ -234,6 +235,8 @@ class ExternOp(Op):
         for arg_name, args in self.assignments:
             if isinstance(args, list):
                 for i, arg in enumerate(args):
+                    if isinstance(arg, int):
+                        print(arg)
                     statements.append(
                         "{}.{}[{}] <== {};".format(
                             self.component_name, arg_name, i, arg.fullname
