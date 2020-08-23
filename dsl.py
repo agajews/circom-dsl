@@ -6,12 +6,16 @@ class Session:
         self.names = set()
         self.component_names = set()
         self.constraints = []
+        self.children = []
         self.includes = set()
 
     def input(self, name, private=False):
         if name in self.names:
             raise Exception("input named {} not unique in the session".format(name))
         return Input(self, name, private)
+
+    def add_child(self, child):
+        self.children.append(child)
 
     def constant(self, val):
         return Constant(self, val)
@@ -22,6 +26,10 @@ class Session:
         includes = ['include "{}"'.format(path) for path in self.includes]
         traversed = set()
         signals, statements = output._gen(traversed, my_signals=False)
+        for child in self.children:
+            curr_signals, curr_statements = child._gen(traversed)
+            signals += curr_signals
+            statements += curr_statements
         for left, right in self.constraints:
             curr_signals, curr_statements = left._gen(traversed)
             signals += curr_signals
@@ -43,7 +51,7 @@ class Session:
     def include(self, path):
         self.includes.add(path)
 
-    def extern(self, name, inputs, output, args=[]):
+    def extern(self, name, inputs, output=None, args=[]):
         return Extern(self, name, inputs, output, args)
 
     def cond(self, pred, left, right):
@@ -65,7 +73,7 @@ class Extern:
         if isinstance(output, list):
             assert len(output) == 1
             assert isinstance(output[0], str)
-        else:
+        elif output is not None:
             assert isinstance(output, str)
         self.args = args
 
@@ -106,10 +114,14 @@ class Extern:
                 children.append(arg)
                 assignments.append((name, arg))
         extern_op = ExternOp(self.sess, self.name, children, assignments, self.args)
+        self.sess.add_child(extern_op)
 
         if isinstance(self.output, list):
             return ExternArray(extern_op, self.output[0])
-        return ExternOutput(extern_op, self.output)
+        elif isinstance(self.output, str):
+            return ExternOutput(extern_op, self.output)
+        else:
+            return None
 
 
 class Op:

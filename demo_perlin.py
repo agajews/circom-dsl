@@ -21,7 +21,6 @@ multirangeproof = sess.extern(
     "MultiRangeProof",
     args=[3, 128, 1000000000000000000000000000000000000],
     inputs={"in": [3]},
-    output="out",
 )
 
 
@@ -45,7 +44,7 @@ def check_less_than(a, b):
 
 
 def check_multi_range(a, b, c):
-    multirangeproof(_in=[a, b, c]).check_equals(1)
+    multirangeproof(_in=[a, b, c])
 
 
 def modulo(dividend, divisor):
@@ -55,13 +54,10 @@ def modulo(dividend, divisor):
         divisor - raw_remainder,
         raw_remainder,
     ).attach()
-    # remainder = sess.cond(
-    #     raw_remainder != 0, divisor - raw_remainder, raw_remainder,
-    # ).attach()
     quotient = ((dividend.detach() - remainder) / divisor).attach()
     (divisor * quotient + remainder).check_equals(dividend)
-    # check_less_than(remainder, divisor)
-    # check_multi_range(divisor, quotient, dividend)
+    check_less_than(remainder, divisor)
+    check_multi_range(divisor, quotient, dividend)
     return (quotient, remainder)
 
 
