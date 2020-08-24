@@ -7,7 +7,7 @@ SCALE_BITS = 16
 
 sess.include("circomlib/circuits/mimcsponge.circom")
 mimc_sponge = sess.extern(
-    "MiMCSponge", args=[3, 4, 1], inputs={"in": [3], "k": 1}, output=["outs"]
+    "MiMCSponge", args=[3, 4, 1], inputs={"ins": [3], "k": 1}, output=["outs"]
 )
 
 sess.include("circomlib/circuits/bitify.circom")
@@ -28,12 +28,15 @@ multirangeproof = sess.extern(
 
 sess.include("QuinSelector.circom")
 quinselector = sess.extern(
-    "QuinSelector", args=[SCALE_BITS], inputs={"in": [SCALE_BITS]}, output="out"
+    "QuinSelector",
+    args=[SCALE_BITS],
+    inputs={"in": [SCALE_BITS], "index": 1},
+    output="out",
 )
 
 
 def random(x, y, scale):
-    full_random = mimc_sponge(_in=[x, y, scale], k=0)
+    full_random = mimc_sponge(ins=[x, y, scale], k=0)
     bits = num2bits(_in=full_random[0])
     truncated = bits[3] * 8 + bits[2] * 4 + bits[1] * 2 + bits[0]
     return truncated
@@ -64,8 +67,8 @@ def modulo(dividend, divisor):
     ).attach()
     quotient = ((dividend.detach() - remainder) / divisor).attach()
     (divisor * quotient + remainder).check_equals(dividend)
-    check_less_than(remainder, divisor)
-    check_multi_range(divisor, quotient, dividend)
+    # check_less_than(remainder, divisor)
+    # check_multi_range(divisor, quotient, dividend)
     return remainder
 
 

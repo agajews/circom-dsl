@@ -89,6 +89,7 @@ class Extern:
         kwargs = self.strip_underscores(kwargs)
         assignments = []
         children = []
+        assert len(kwargs) == len(self.inputs)
         for name, typ in self.inputs.items():
             assert name in kwargs
             arg = kwargs[name]
