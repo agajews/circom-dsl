@@ -4,6 +4,7 @@ sess = Session()
 
 BIGNUM = 1649267441664000
 SCALE_BITS = 16
+NUM_BITS = 254
 
 sess.include("circomlib/circuits/mimcsponge.circom")
 mimc_sponge = sess.extern(
@@ -11,10 +12,10 @@ mimc_sponge = sess.extern(
 )
 
 sess.include("circomlib/circuits/bitify.circom")
-num2bits = sess.extern("Num2Bits", args=[254], inputs={"in": 1}, output=["out"])
+num2bits = sess.extern("Num2Bits", args=[NUM_BITS], inputs={"in": 1}, output=["out"])
 
 sess.include("circomlib/circuits/sign.circom")
-sign = sess.extern("Sign", inputs={"in": [254]}, output="sign")
+sign = sess.extern("Sign", inputs={"in": [NUM_BITS]}, output="sign")
 
 sess.include("circomlib/circuits/comparators.circom")
 lessthan = sess.extern("LessThan", args=[SCALE_BITS], inputs={"in": [2]}, output="out")
@@ -28,10 +29,7 @@ multirangeproof = sess.extern(
 
 sess.include("QuinSelector.circom")
 quinselector = sess.extern(
-    "QuinSelector",
-    args=[SCALE_BITS],
-    inputs={"in": [SCALE_BITS], "index": 1},
-    output="out",
+    "QuinSelector", args=[16], inputs={"in": [16], "index": 1}, output="out",
 )
 
 
@@ -95,9 +93,9 @@ def random_gradient_at(x, y, scale):
     denom = BIGNUM // 1000
 
     index = random(x, y, scale)
-    x = quinselector(_in=[x for x, y in vecs], index=index)
-    y = quinselector(_in=[y for x, y in vecs], index=index)
-    return (x * denom, y * denom)
+    grad_x = quinselector(_in=[x for x, y in vecs], index=index)
+    grad_y = quinselector(_in=[y for x, y in vecs], index=index)
+    return (grad_x * denom, grad_y * denom)
 
 
 def get_corners_and_grad_vectors(x, y, scale):
@@ -140,16 +138,19 @@ def summation(xs):
     return out
 
 
+# coords, grads, and p are fractions
 def perlin_value(coords, grads, p, scale):
     is_bottoms = [True, True, False, False]
     is_lefts = [True, False, True, False]
     outputs = []
 
+    p = (div(p[0], scale), div(p[1], scale))
+    coords = [(div(x, scale), div(y, scale)) for x, y in coords]
+
     for coord, grad, is_bottom, is_left in zip(coords, grads, is_bottoms, is_lefts):
-        dist = (div(p[0] - coord[0], scale), div(p[1] - coord[1], scale))
+        dist = (p[0] - coord[0], p[1] - coord[1])
         dot_prod = dot(grad, dist)
-        corner = (div(coord[0], scale), div(coord[1], scale))
-        weight = get_weight(corner, p, is_bottom, is_left)
+        weight = get_weight(coord, p, is_bottom, is_left)
         outputs.append(div(dot_prod * weight, BIGNUM))
 
     return summation(outputs)
@@ -162,6 +163,6 @@ def single_scale_perlin(p, scale):
     return perlin_value(coords, grads, p, scale)
 
 
-p = (sess.input("p0"), sess.input("p1"))
-z = single_scale_perlin(p, sess.constant(2048))
-print(sess.gen(z))
+x, y = (sess.input("x"), sess.input("y"))
+val = single_scale_perlin((x, y), sess.constant(2048))
+print(sess.gen(val))

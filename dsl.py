@@ -296,6 +296,12 @@ class ExternArray(Op):
         self.extern_op = extern_op
         self.output_prop = output_prop
 
+    def _gen_statements(self):
+        return []
+
+    def _gen_signals(self):
+        return []
+
     def __getitem__(self, index):
         assert isinstance(index, int)
         return ExternArrayElem(self.extern_op, self.output_prop, index)
