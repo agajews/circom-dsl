@@ -146,3 +146,22 @@ def div(a, b):
     return q
 ```
 Now we can use this function anywhere in our code, without having to manually add division constraints ever again! Neat.
+
+### Extern circuits
+If you're interfacing with an existing production codebase, it can be useful to import external Circom circuits (those not written in KnowledgeFlow, that is). Here I'm importing the num2bits conversion function from the `circomlib` library:
+```python
+sess.include("circomlib/circuits/bitify.circom")
+num2bits = sess.extern("Num2Bits", args=[NUM_BITS], inputs={"in": 1}, output=["out"])
+```
+The `include` command tells KnowledgeFlow to add an import to the `circomlib/circuits/bitify.circom` file, which contains the `Num2Bits` template, while the `extern` command creates a function that can be used from KnowledgeFlow to interface with this template. The `args` argument is a list of static (compile-time) arguments to pass to the template, the `inputs` argument is a dictionary mapping names to types, and the `output` argument is the name of the signal that contains the output of the component (support for multiple output signals will be added in the future). Types in Circom are very simple: there are numbers, and there are arrays. In KnowledgeFlow, any integer (`1` in the example above) can serve as the number type, and the type of an array is represented by a singleton list whose member is the length of the array (for example, [3] would be the type of an array of length 3). If the `output` signal name is wrapped in a list, it is interpreted as an array (without an annotated length), otherwise it is taken to be a number.
+
+### Cond statements
+In complex circuits with lots of detached computations and manual constraints, it can sometimes be useful to use a conditional statement on detached variables. For example, in the modulo circuit from the introduction, we saw:
+```python
+remainder = sess.cond(
+    is_negative(dividend).detach() & raw_remainder != 0,
+    divisor - raw_remainder,
+    raw_remainder,
+).attach()
+```
+The first argument to `sess.cond` is the condition, the second if the output of the `then` branch, and the third is the output of the `else` branch. All three arguments need to be detached from the constraint set, and the output of `sess.cond` remains detached until you manually re-attach it, as in the example above.
