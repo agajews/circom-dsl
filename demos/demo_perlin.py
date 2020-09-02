@@ -65,8 +65,8 @@ def modulo(dividend, divisor):
     ).attach()
     quotient = ((dividend.detach() - remainder) / divisor).attach()
     (divisor * quotient + remainder).check_equals(dividend)
-    # check_less_than(remainder, divisor)
-    # check_multi_range(divisor, quotient, dividend)
+    check_less_than(remainder, divisor)
+    check_multi_range(divisor, quotient, dividend)
     return remainder
 
 

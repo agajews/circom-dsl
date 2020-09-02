@@ -2,6 +2,7 @@ import textwrap
 
 
 class Session:
+    """The `Session` class is your starting point for interacting with KnowledgeFlow."""
     def __init__(self):
         self.names = set()
         self.component_names = set()
